@@ -9,7 +9,7 @@
         <attr name="glowRadius" format="dimension" />
         <attr name="snapMargin" format="dimension" />
 
-        <attr name="upper" format="reference" />
-        <attr name="bottom" format="reference" />
+        <attr name="left" format="reference" />
+        <attr name="right" format="reference" />
     </declare-styleable>
 </resources>

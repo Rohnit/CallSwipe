@@ -10,9 +10,6 @@ import android.util.TypedValue;
 import android.view.MotionEvent;
 import android.view.View;
 
-/**
- * @author aenterhy
- */
 public class ToggleSwitchButton extends View {
 
     private static final String TAG = "ToggleSwitch";
@@ -28,30 +25,29 @@ public class ToggleSwitchButton extends View {
     private TargetDrawable mHandleDrawable;
     private TargetDrawable mOuterRing;
 
-    private TargetDrawable upper;
-    private TargetDrawable bottom;
+    private TargetDrawable left;
+    private TargetDrawable right;
 
     private int mActiveTarget = -1;
     private float mGlowRadius;
-    private float mWaveCenterX;
-    private float mWaveCenterY;
+    private float mWaveCenterX, mWaveCenterX1, mWaveCenterX2;
+    private float mWaveCenterY, mWaveCenterY1, mWaveCenterY2;
     private int mMaxTargetHeight;
     private int mMaxTargetWidth;
 
     private float mOuterRadius = 0.0f;
     private float mSnapMargin = 0.0f;
     private boolean mDragging;
-    private final int TARGET_UP = 1;
-    private final int TARGET_BOTTOM = 3;
+    private boolean isHandleTouch;
+    private final int TARGET_LEFT = 1;
+    private final int TARGET_RIGHT = 3;
     private int mPointerId;
-
-    private int widthPixels;
 
     public interface OnTriggerListener {
 
-        void toggledUp();
+        void acceptCall();
 
-        void toggledDown();
+        void declineCall();
     }
 
     public ToggleSwitchButton(Context context) {
@@ -61,25 +57,16 @@ public class ToggleSwitchButton extends View {
     public ToggleSwitchButton(Context context, AttributeSet attrs) {
         super(context, attrs);
         Resources res = context.getResources();
-        TypedArray a = context.obtainStyledAttributes(attrs, co.aenterhy.toggleswitch.R.styleable.ToggleSwitchButton);
+        TypedArray a = context.obtainStyledAttributes(attrs, R.styleable.ToggleSwitchButton);
 
-        mHandleDrawable = new TargetDrawable(res, getResourceId(a, co.aenterhy.toggleswitch.R.styleable.ToggleSwitchButton_handleDrawable));
-        upper = new TargetDrawable(res, getResourceId(a, co.aenterhy.toggleswitch.R.styleable.ToggleSwitchButton_upper));
-        bottom = new TargetDrawable(res, getResourceId(a, co.aenterhy.toggleswitch.R.styleable.ToggleSwitchButton_bottom));
+        mHandleDrawable = new TargetDrawable(res, getResourceId(a, R.styleable.ToggleSwitchButton_handleDrawable));
+        left = new TargetDrawable(res, getResourceId(a, R.styleable.ToggleSwitchButton_left));
+        right = new TargetDrawable(res, getResourceId(a, R.styleable.ToggleSwitchButton_right));
 
-        mOuterRing = new TargetDrawable(res, co.aenterhy.toggleswitch.R.drawable.ic_switch_shape1);
-        mOuterRadius = a.getDimension(co.aenterhy.toggleswitch.R.styleable.ToggleSwitchButton_outerRadius, mOuterRadius);
-
-        widthPixels = getContext().getResources().getDisplayMetrics().widthPixels;
-        Log.i(TAG, "ToggleSwitchButton: widthPixels " + widthPixels);
-        /*mGlowRadius = mOuterRing.getWidth() / 2;
-        mMaxTargetWidth = mOuterRing.getWidth();
-        mMaxTargetHeight = mHandleDrawable.getHeight();*/
+        mOuterRing = new TargetDrawable(res, R.drawable.ic_switch_shape);
+        mOuterRadius = a.getDimension(R.styleable.ToggleSwitchButton_outerRadius, mOuterRadius);
 
         a.recycle();
-
-        /*if (mOuterRadius == 0.0f)
-            mOuterRadius = Math.max(mOuterRing.getWidth(), mOuterRing.getHeight()) / 2.0f;*/
 
         mSnapMargin = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, SNAP_MARGIN_DEFAULT, getContext().getResources().getDisplayMetrics());
     }
@@ -143,11 +130,11 @@ public class ToggleSwitchButton extends View {
 
     private void dispatchTriggerEvent(int whichTarget) {
         switch (whichTarget) {
-            case TARGET_UP:
-                mOnTriggerListener.toggledUp();
+            case TARGET_LEFT:
+                mOnTriggerListener.declineCall();
                 break;
-            case TARGET_BOTTOM:
-                mOnTriggerListener.toggledDown();
+            case TARGET_RIGHT:
+                mOnTriggerListener.acceptCall();
                 break;
         }
     }
@@ -171,26 +158,40 @@ public class ToggleSwitchButton extends View {
         switch (action) {
             case MotionEvent.ACTION_POINTER_DOWN:
             case MotionEvent.ACTION_DOWN:
+                Log.i(TAG, "onTouchEvent: down");
                 handleDown(event);
-                handleMove(event);
+                if(isHandleTouch) {
+                    handleDownUp(event);
+                }
                 handled = true;
                 break;
 
             case MotionEvent.ACTION_MOVE:
-                handleMove(event);
+                Log.i(TAG, "onTouchEvent: move");
+                if(isHandleTouch) {
+                    handleMove(event);
+                }
                 handled = true;
                 break;
 
             case MotionEvent.ACTION_POINTER_UP:
             case MotionEvent.ACTION_UP:
-                handleMove(event);
-                handleUp(event);
+                Log.i(TAG, "onTouchEvent: Up");
+                if(isHandleTouch) {
+                    handleDownUp(event);
+                    handleUp(event);
+                }
+                isHandleTouch = false;
                 handled = true;
                 break;
 
             case MotionEvent.ACTION_CANCEL:
-                handleMove(event);
-                handleCancel();
+                Log.i(TAG, "onTouchEvent: cancel");
+                if(isHandleTouch) {
+                    handleDownUp(event);
+                    handleCancel();
+                }
+                isHandleTouch = false;
                 handled = true;
                 break;
         }
@@ -207,13 +208,61 @@ public class ToggleSwitchButton extends View {
 
         float eventX = event.getX(actionIndex);
         float eventY = event.getY(actionIndex);
-        switchToState(STATE_START);
-        if (!trySwitchToFirstTouchState(eventX, eventY)) {
-            mDragging = false;
-        } else {
-            mPointerId = event.getPointerId(actionIndex);
-            updateGlowPosition(eventX);
+        isHandleTouch = eventX > mWaveCenterX1 && eventX < mWaveCenterX2 && eventY > mWaveCenterY1 && eventY < mWaveCenterY2;
+        Log.i(TAG, "handleDown: isTouch " + isHandleTouch);
+        if(isHandleTouch){
+            switchToState(STATE_START);
+            Log.i(TAG, "handleDown: x " + eventX +  "y " + eventY);
+            if (!trySwitchToFirstTouchState(eventX, eventY)) {
+                mDragging = false;
+            } else {
+                mPointerId = event.getPointerId(actionIndex);
+                updateGlowPosition(eventX);
+            }
         }
+    }
+
+    private void handleDownUp(MotionEvent event) {
+        int activeTarget = -1;
+        final int historySize = event.getHistorySize();
+        float y = 0.0f;
+        int actionIndex = event.findPointerIndex(mPointerId);
+
+        if (actionIndex == -1) return;
+
+        for (int k = 0; k < historySize + 1; k++) {
+            float eventX = k < historySize ? event.getHistoricalX(actionIndex, k) : event.getX(actionIndex);
+            float eventY = k < historySize ? event.getHistoricalY(actionIndex, k) : event.getY(actionIndex);
+            float tx = eventX - mWaveCenterX;
+            float ty = eventY - mWaveCenterY;
+            float touchRadius = (float) Math.sqrt(dist2(tx, ty));
+            final float scale = touchRadius > mOuterRadius ? mOuterRadius / touchRadius : 1.0f;
+            float limitY = tx * scale;
+            double angleRad = Math.atan2(tx, -ty);
+
+            if (!mDragging)
+                trySwitchToFirstTouchState(eventX, eventY);
+
+            if (mDragging) {
+                final float snapRadius = mOuterRadius - mSnapMargin;
+                final float snapDistance2 = snapRadius * snapRadius;
+
+                for (int i = 0; i < 4; i++) {
+                    double targetMinRad = (i - 0.5) * 2 * Math.PI / 4;
+                    double targetMaxRad = (i + 0.5) * 2 * Math.PI / 4;
+                    boolean angleMatches = (angleRad > targetMinRad && angleRad <= targetMaxRad) || (angleRad + 2 * Math.PI > targetMinRad && angleRad + 2 * Math.PI <= targetMaxRad);
+                    if (angleMatches && (dist2(tx, ty) > snapDistance2)) {
+                        activeTarget = i;
+                    }
+                }
+            }
+            y = limitY;
+        }
+
+        if (!mDragging) return;
+
+        updateGlowPosition(y);
+        mActiveTarget = activeTarget;
     }
 
     private void handleUp(MotionEvent event) {
@@ -285,8 +334,8 @@ public class ToggleSwitchButton extends View {
         super.onLayout(changed, left, top, right, bottom);
         final int width = right - left;
         final int height = bottom - top;
-        Log.i(TAG, "onLayout: width " + width);
-        Log.i(TAG, "onLayout: height " + height);
+//        Log.i(TAG, "onLayout: width " + width);
+//        Log.i(TAG, "onLayout: height " + height);
 
         mOuterRing.setSize(left, top, right, bottom);
 
@@ -296,8 +345,8 @@ public class ToggleSwitchButton extends View {
 
         mOuterRadius = width / 2.5f;
 
-        final float placementWidth = width;
-        final float placementHeight = height;
+//        final float placementWidth = width;
+//        final float placementHeight = height;
         float newWaveCenterX = width / 2;
         float newWaveCenterY = mMaxTargetHeight / 2;
 
@@ -307,11 +356,20 @@ public class ToggleSwitchButton extends View {
         mHandleDrawable.setPositionX(newWaveCenterX);
         mHandleDrawable.setPositionY(newWaveCenterY);
 
+        Log.i(TAG, "onLayout: width " + mHandleDrawable.getWidth() + " height " + mHandleDrawable.getHeight());
+
         updateTargetPositions(newWaveCenterX, newWaveCenterY);
         updateGlowPosition(newWaveCenterX);
 
         mWaveCenterX = newWaveCenterX;
         mWaveCenterY = newWaveCenterY;
+
+        mWaveCenterX1 = (mWaveCenterX - (mHandleDrawable.getWidth()/2));
+        mWaveCenterX2 = (mWaveCenterX + (mHandleDrawable.getWidth()/2));
+        mWaveCenterY1 = (mWaveCenterY - mMaxTargetHeight/2);
+        mWaveCenterY2 = (mWaveCenterY + mMaxTargetHeight/2);
+
+        Log.i(TAG, "onLayout: x " +mWaveCenterX +" y" + mWaveCenterY);
 
 //        switchToState(STATE_FINISH);
         reset();
@@ -320,22 +378,22 @@ public class ToggleSwitchButton extends View {
     private void updateTargetPositions(float centerX, float centerY) {
         final float alpha = (float) (-2.0f * Math.PI / 4);
 
-        upper.setPositionX(centerX);
-        upper.setPositionY(centerY);
-        bottom.setPositionX(centerX);
-        bottom.setPositionY(centerY);
+        left.setPositionX(centerX);
+        left.setPositionY(centerY);
+        right.setPositionX(centerX);
+        right.setPositionY(centerY);
 
-        upper.setX(mOuterRadius * (float) Math.sin(alpha * 1));
-        upper.setY(mOuterRadius * (float) Math.cos(alpha * 1));
-        bottom.setX(mOuterRadius * (float) Math.sin(alpha * 3));
-        bottom.setY(mOuterRadius * (float) Math.cos(alpha * 3));
+        left.setX(mOuterRadius * (float) Math.sin(alpha * 1));
+        left.setY(mOuterRadius * (float) Math.cos(alpha * 1));
+        right.setX(mOuterRadius * (float) Math.sin(alpha * 3));
+        right.setY(mOuterRadius * (float) Math.cos(alpha * 3));
     }
 
     @Override
     protected void onDraw(Canvas canvas) {
 //        mOuterRing.draw(canvas);
-        bottom.draw(canvas);
-        upper.draw(canvas);
+        right.draw(canvas);
+        left.draw(canvas);
         mHandleDrawable.draw(canvas);
         super.onDraw(canvas);
     }
@@ -348,8 +406,8 @@ public class ToggleSwitchButton extends View {
         return dx * dx + dy * dy;
     }
 
-    public float getdpToPixel(int values){
-        return values * getContext().getResources().getDisplayMetrics().density;
-    }
+//    public float getdpToPixel(int values){
+//        return values * getContext().getResources().getDisplayMetrics().density;
+//    }
 
 }

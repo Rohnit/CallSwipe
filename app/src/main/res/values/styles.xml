@@ -20,8 +20,8 @@
         <item name="android:background">@drawable/ic_switch_shape1</item>
         <item name="handleDrawable">@drawable/ic_camera_white_48dp</item>
         <!--<item name="outerRadius">@dimen/target_placement_radius</item>-->
-        <item name="upper">@drawable/ic_call_end_red_24dp</item>
-        <item name="bottom">@drawable/ic_call_green_24dp</item>
+        <item name="right">@drawable/ic_call_end_red_24dp</item>
+        <item name="left">@drawable/ic_call_green_24dp</item>
     </style>
 
 </resources>
